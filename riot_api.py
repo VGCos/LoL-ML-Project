@@ -2,6 +2,9 @@ from dotenv import load_dotenv
 import sqlite3
 import os
 import requests
+import sys
+import time
+
 
 load_dotenv()
 RIOT_API_KEY = os.getenv("RIOT_API_KEY")
@@ -9,9 +12,9 @@ REGION = "na1"
 DB_NAME = "matches.db"
 def initialize_database():
     with sqlite3.connect(DB_NAME) as conn:
-        cur = conn.cursor
+        cursor = conn.cursor()
 
-        cur.execute("""
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS matches (
                     match_id TEXT PRIMARY KEY,
                     blue1 INTEGER,
@@ -35,78 +38,117 @@ def get_puuids():
     response = requests.get(url)
 
     if response.status_code == 200:
+        print("OK")
         data = response.json()['entries']
-            
+        
+        puuids = []
         for entry in data:
-            puuids = entry["puuid"]
-        print(len(puuids))
+            puuids.append(entry["puuid"])
+
         return puuids
+    
     else:
         print(response.status_code)
-        print("Something went wrong")
-        return []
+        print("Something went wrong getting puuids")
+        sys.exit()
+
 
 def get_matches(puuid):
-    url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/X5hQ2to4Fq-YvIbDNlfMumDu2BvJ13U1c3o5TzIjQv8qb__p4Ixea0UG68aBmIIStp2c8QAAJPx-bQ/ids?api_key={RIOT_API_KEY}"
+    url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?api_key={RIOT_API_KEY}"
     response = requests.get(url)
 
-    print(response.status_code)
-    print(response.json())
     if response.status_code == 200:
         return response.json()
+    else:
+        print(response.status_code)
+        print("something went wrong getting matches")
+        sys.exit()
 
-#NA1_5599872514
-# info -> participants -> players
 
+def match_exists(cursor, match_id):
+    cursor.execute(
+        "SELECT 1 FROM matches where match_id = ?",
+        (match_id,)
+    )
+    return cursor.fetchone() is not None
 
 def get_match_data(match_id):
     url = f"https://americas.api.riotgames.com/lol/match/v5/matches/{match_id}?api_key={RIOT_API_KEY}"
     response = requests.get(url)
 
+    time.sleep(0.1)
     if response.status_code == 200:
         data = response.json()
-        participants = data["info"]["participants"]
-        teams = data["info"]["teams"]
-
-        blue = []
-        red = []
-        for player in participants:
-            champ = player["championId"]
-            if player["teamId"] == 100:
-                blue.append(champ)
-            else:
-                red.append(champ)
-        
-        for team in teams:
-            if team[0]["teamId"] == 100:
-                if team["win"] == True:
-                    blue_won = 1
-                else:
-                    blue_won = 0
-
-        with sqlite3.connect(DB_NAME) as conn:
-            cur = conn.cursor()
-
-            cur.execute("""INSERT OR IGNORE INTO matches (
-                        match_id,
-                        blue1, blue2, blue3, blue4, blue5,
-                        red1, red2, red3, red4, red5,
-                        blueW
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            match_id,
-                            *blue,
-                            *red,
-                            blue_won
-                        ))
-                
+        return data
     else:
         print(response.status_code)
-        print("som,ething went wrong")
+        print("something went wrong getting match data")
+        sys.exit()
 
 
-#to do: complete and test
+def insert_match_data(cursor, match_data):
+    match_id = match_data["metadata"]["matchId"]
+    participants = match_data["info"]["participants"]
+    teams = match_data["info"]["teams"]
+
+    # restricts to only ranked solo/duo
+    if match_data["info"]["queueId"] != 420:
+        return
+    
+    blue = []
+    red = []
+    for player in participants:
+        champ = player["championId"]
+        if player["teamId"] == 100:
+            blue.append(champ)
+        else:
+            red.append(champ)
+    
+    for team in teams:
+        if team["teamId"] == 100:
+            if team["win"] == True:
+                blue_won = 1
+            else:
+                blue_won = 0
+    
+    cursor.execute("""INSERT OR IGNORE INTO matches (
+                match_id,
+                blue1, blue2, blue3, blue4, blue5,
+                red1, red2, red3, red4, red5,
+                blueW
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    match_id,
+                    *blue,
+                    *red,
+                    blue_won
+                ))
+
+
+#to do: test more and collect data
+if __name__ == "__main__":
+    
+    initialize_database()
+
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        i = 0
+        puuids = get_puuids()
+        for puuid in puuids:
+
+            match_ids = get_matches(puuid)
+
+            for match_id in match_ids:
+
+                if not match_exists(cursor, match_id):
+                    match_data = get_match_data(match_id)
+                    print(f"inserting {i}")
+                    insert_match_data(cursor, match_data)
+                    print(f"inserted {i}")
+                    i += 1
+        
+
 
 
 

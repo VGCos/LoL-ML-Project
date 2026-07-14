@@ -48,21 +48,36 @@ def get_puuids():
         return puuids
     
     else:
-        print(response.status_code)
-        print("Something went wrong getting puuids")
-        sys.exit()
+        # handles getting rate limited
+        if response.status_code == 429:
+            seconds = response.headers.get("Retry-After")
+            print(f"retrying after {seconds} seconds")
+            time.sleep(int(seconds))
+        else:
+            print(response.status_code)
+            print(response.text)
+            print("something went wrong getting puuids")
+            sys.exit()
 
 
-def get_matches(puuid):
+def get_match_ids(puuid):
     url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?api_key={RIOT_API_KEY}"
     response = requests.get(url)
 
     if response.status_code == 200:
         return response.json()
     else:
-        print(response.status_code)
-        print("something went wrong getting matches")
-        sys.exit()
+        # handles getting rate limited
+        if response.status_code == 429:
+            seconds = response.headers.get("Retry-After")
+            print(f"retrying after {seconds} seconds")
+            time.sleep(int(seconds))
+            return []
+        else:
+            print(response.status_code)
+            print(response.text)
+            print("something went wrong getting matches")
+            sys.exit()
 
 
 def match_exists(cursor, match_id):
@@ -71,6 +86,7 @@ def match_exists(cursor, match_id):
         (match_id,)
     )
     return cursor.fetchone() is not None
+
 
 def get_match_data(match_id):
     url = f"https://americas.api.riotgames.com/lol/match/v5/matches/{match_id}?api_key={RIOT_API_KEY}"
@@ -81,9 +97,16 @@ def get_match_data(match_id):
         data = response.json()
         return data
     else:
-        print(response.status_code)
-        print("something went wrong getting match data")
-        sys.exit()
+        # handles getting rate limited
+        if response.status_code == 429:
+            seconds = response.headers.get("Retry-After")
+            print(f"retrying after {seconds} seconds")
+            time.sleep(int(seconds))
+        else:
+            print(response.status_code)
+            print(response.text)
+            print("something went wrong getting match data")
+            sys.exit()
 
 
 def insert_match_data(cursor, match_data):
@@ -133,20 +156,30 @@ if __name__ == "__main__":
 
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        i = 0
-        puuids = get_puuids()
-        for puuid in puuids:
 
-            match_ids = get_matches(puuid)
+        i = 0
+        print("getting puuids")
+        puuids = get_puuids()
+        print("got puuids")
+
+        for puuid in puuids:
+            print("getting match ids")
+            match_ids = get_match_ids(puuid)
+            print("got match ids")
 
             for match_id in match_ids:
-
                 if not match_exists(cursor, match_id):
                     match_data = get_match_data(match_id)
+                    # if we get rate limited
+                    if match_data is None:
+                        continue
                     print(f"inserting {i}")
                     insert_match_data(cursor, match_data)
                     print(f"inserted {i}")
+
                     i += 1
+                    if i % 50 == 0:
+                        conn.commit()
         
 
 

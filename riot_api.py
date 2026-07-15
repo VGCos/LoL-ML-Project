@@ -149,14 +149,14 @@ def insert_match_data(cursor, match_data):
                 ))
 
 
-#to do: test more and collect data
 if __name__ == "__main__":
-    
     initialize_database()
 
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
 
+        # cursor.execute("SELECT COUNT(*) FROM matches")
+        # print(cursor.fetchone())
         i = 0
         print("getting puuids")
         puuids = get_puuids()

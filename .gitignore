@@ -219,3 +219,6 @@ __marimo__/
 
 #database
 matches.db
+
+#json
+champ_mapping.json

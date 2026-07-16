@@ -1,5 +1,8 @@
 import requests
 import json
+import numpy as np
+import pandas as pd
+import sqlite3
 
 
 def get_champs_data():
@@ -30,4 +33,27 @@ def load_mapping():
     champ_to_idx = {int(k): v for k, v in champ_to_idx.items()}
     return champ_to_idx
 
-def 
+def preprocess():
+    champ_to_idx = load_mapping()
+
+    with sqlite3.connect("matches.db") as conn:
+        df = pd.read_sql_query("SELECT * FROM matches", conn)
+
+    cols = 2 * len(champ_to_idx)
+    X = []
+    for _, row in df.iterrows():
+        vector = np.zeros(cols)
+        
+        blue_champs = row[["blue1", "blue2", "blue3", "blue4", "blue5"]]
+        red_champs = row[["red1", "red2", "red3", "red4", "red5"]]
+
+        for champ in blue_champs:
+            vector[champ_to_idx[champ]] = 1
+        
+        for champ in red_champs:
+            vector[len(champ_to_idx) + champ_to_idx[champ]] = 1
+        
+        X.append(vector)
+    X = np.array(X)
+    y = df["blueW"].values
+

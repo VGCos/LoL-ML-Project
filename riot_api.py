@@ -17,18 +17,18 @@ def initialize_database():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS matches (
                     match_id TEXT PRIMARY KEY,
-                    blue1 INTEGER,
-                    blue2 INTEGER,
-                    blue3 INTEGER,
-                    blue4 INTEGER,
-                    blue5 INTEGER,
-                    red1 INTEGER,
-                    red2 INTEGER,
-                    red3 INTEGER,
-                    red4 INTEGER,
-                    red5 INTEGER,
                     blueW INTEGER
                 )
+        """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS participants (
+                match_id TEXT,
+                team_id INTEGER,
+                position TEXT,
+                champion_id INTEGER,
+                PRIMARY KEY (match_id, team_id, position)
+            )
         """)
 
         conn.commit()
@@ -120,13 +120,22 @@ def insert_match_data(cursor, match_data):
     
     blue = []
     red = []
+    # collects champ id and pos from each player and adds to corresponding team
     for player in participants:
         champ = player["championId"]
+        pos = player["teamPosition"]
         if player["teamId"] == 100:
-            blue.append(champ)
+            blue.append((champ, pos))
         else:
-            red.append(champ)
-    
+            red.append((champ, pos))
+
+    # prepares data to be inserted
+    rows = []
+    for team_id, side in [(100, blue), (200, red)]:
+        for champion_id, position in side:
+            rows.append((match_id, team_id, champion_id, position))
+
+
     for team in teams:
         if team["teamId"] == 100:
             if team["win"] == True:
@@ -136,17 +145,22 @@ def insert_match_data(cursor, match_data):
     
     cursor.execute("""INSERT OR IGNORE INTO matches (
                 match_id,
-                blue1, blue2, blue3, blue4, blue5,
-                red1, red2, red3, red4, red5,
                 blueW
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?)
+                """,
                 (
                     match_id,
-                    *blue,
-                    *red,
                     blue_won
                 ))
+
+    cursor.executemany("""INSERT OR IGNORE INTO participants (
+                match_id, team_id, champion_id, position
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                rows
+                       )
 
 
 if __name__ == "__main__":
@@ -156,6 +170,8 @@ if __name__ == "__main__":
         cursor = conn.cursor()
 
         # cursor.execute("SELECT COUNT(*) FROM matches")
+        # print(cursor.fetchone())
+        # cursor.execute("SELECT COUNT(*) FROM participants")
         # print(cursor.fetchone())
         i = 0
         print("getting puuids")

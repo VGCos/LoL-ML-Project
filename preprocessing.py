@@ -3,6 +3,7 @@ import json
 import numpy as np
 import pandas as pd
 import sqlite3
+import sys
 
 
 def get_champs_data():
@@ -37,23 +38,35 @@ def preprocess():
     champ_to_idx = load_mapping()
 
     with sqlite3.connect("matches.db") as conn:
-        df = pd.read_sql_query("SELECT * FROM matches", conn)
+        matches_df = pd.read_sql_query("SELECT * FROM matches", conn)
+        players_df = pd.read_sql_query("SELECT * FROM participants", conn)
 
-    cols = 2 * len(champ_to_idx)
+    roles = {"TOP" : 0, "JUNGLE" : 1, "MIDDLE" : 2, "BOTTOM" : 3, "UTILITY" : 4}
+    num_champs = len(champ_to_idx)
     X = []
-    for _, row in df.iterrows():
-        vector = np.zeros(cols)
-        
-        blue_champs = row[["blue1", "blue2", "blue3", "blue4", "blue5"]]
-        red_champs = row[["red1", "red2", "red3", "red4", "red5"]]
+    y = []
 
-        for champ in blue_champs:
-            vector[champ_to_idx[champ]] = 1
-        
-        for champ in red_champs:
-            vector[len(champ_to_idx) + champ_to_idx[champ]] = 1
-        
+    for match in matches_df.itertuples():
+        vector = np.zeros(10 * num_champs, dtype=int)
+        match_id = match.match_id
+        blueW = match.blueW
+
+        participants = players_df.groupby("match_id")
+        players = participants.get_group(match_id)
+
+        for player in players.itertuples():
+            team_offset = 0 if player.team_id == 100 else 5
+            position_offset = roles[player.position]
+            index = champ_to_idx[player.champion_id]
+            vec_index = (team_offset + position_offset) * num_champs + index
+            vector[vec_index] ^= 1
+
         X.append(vector)
+        y.append(blueW)
+
     X = np.array(X)
-    y = df["blueW"].values
+    y = np.array(y)
+    return X, y
+
+
 

@@ -61,7 +61,7 @@ def get_puuids():
 
 
 def get_match_ids(puuid):
-    url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?api_key={RIOT_API_KEY}"
+    url = f"https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?count=100&api_key={RIOT_API_KEY}"
     response = requests.get(url)
 
     if response.status_code == 200:
@@ -116,7 +116,7 @@ def insert_match_data(cursor, match_data):
 
     # restricts to only ranked solo/duo
     if match_data["info"]["queueId"] != 420:
-        return
+        return False
     
     blue = []
     red = []
@@ -161,7 +161,9 @@ def insert_match_data(cursor, match_data):
                 """,
                 rows
                        )
-
+    if cursor.rowcount == 1:
+        return True
+    return False
 
 if __name__ == "__main__":
     initialize_database()
@@ -189,11 +191,15 @@ if __name__ == "__main__":
                     # if we get rate limited
                     if match_data is None:
                         continue
-                    print(f"inserting {i}")
-                    insert_match_data(cursor, match_data)
-                    print(f"inserted {i}")
 
-                    i += 1
+                    inserted = insert_match_data(cursor, match_data)
+
+                    if inserted:
+                        i += 1
+                        print(f"inserted {match_id}, count: {i}")
+                    else:
+                        print(f"skipped {match_id}, count {i}")
+
                     if i % 50 == 0:
                         conn.commit()
         

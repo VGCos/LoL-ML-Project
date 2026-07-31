@@ -40,18 +40,31 @@ def preprocess():
     with sqlite3.connect("matches.db") as conn:
         matches_df = pd.read_sql_query("SELECT * FROM matches", conn)
         players_df = pd.read_sql_query("SELECT * FROM participants", conn)
-
+        
     roles = {"TOP" : 0, "JUNGLE" : 1, "MIDDLE" : 2, "BOTTOM" : 3, "UTILITY" : 4}
     num_champs = len(champ_to_idx)
+    participants = players_df.groupby("match_id")
     X = []
     y = []
+
+    print("preprocessing")
+    # makes sure that every match has 10 players and 2 players for each role
+    valid_positions = set(roles.keys())
+
+    valid_matches = (
+            players_df
+            .groupby("match_id")
+            .filter(lambda x: len(x) == 10 and x["position"].isin(valid_positions).all())
+        )
+    
+    valid_ids = valid_matches["match_id"].unique()
+    matches_df = matches_df[matches_df["match_id"].isin(valid_ids)]
 
     for match in matches_df.itertuples():
         vector = np.zeros(10 * num_champs, dtype=int)
         match_id = match.match_id
         blueW = match.blueW
 
-        participants = players_df.groupby("match_id")
         players = participants.get_group(match_id)
 
         for player in players.itertuples():
@@ -66,7 +79,11 @@ def preprocess():
 
     X = np.array(X)
     y = np.array(y)
-    return X, y
+    np.save('X.npy', X)
+    np.save('y.npy', y)
+    print("done")
+
+preprocess()
 
 
 

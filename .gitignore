@@ -222,3 +222,7 @@ matches.db
 
 #json
 champ_mapping.json
+
+#data
+X.npy
+y.npy
